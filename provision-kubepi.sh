@@ -537,6 +537,8 @@ fi
 updateHostname
 updateStaticNetwork
 # TODO: Add script for setting up gateway on master
+# TODO: Change password for pi user, disable ssh by password
+# TODO: Create a shared pi user rda key login, for easy ssh between nodes 
 createSetupScripts
 
 cleanUpMountDir
