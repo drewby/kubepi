@@ -598,6 +598,7 @@ if [ $config_master ]; then
     waitForPiBoot
     echoInfo "[waiting] Waiting for kubepi_setup"
     ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_setup.sh done. Rebooting...$/ q'
+    waitForPiBoot
     echoInfo "[waiting] Waiting for kubepi_master_setup"
     ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_master_setup.sh done.$/ q'
     getMasterConfig

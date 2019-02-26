@@ -6,6 +6,8 @@
         "hostname": "rpi302",
         "internal-static-ip": "192.168.3.102",
         "internal-gateway": "192.168.3.1",
-        "internal-dns": "192.168.2.1"
+        "internal-dns": "192.168.2.1",
+        "master": "",
+        "zsh": ""
     }
 }
