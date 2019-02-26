@@ -1,0 +1,15 @@
+{
+    "provision-kubepi.sh": {
+        "target-device": "",
+        "raspbian-image": "$HOME/Downloads/2018-11-13-raspbian-stretch-lite.zip",
+        "sha-raspbian": "47ef1b2501d0e5002675a50b6868074e693f78829822eef64f3878487953234d",
+        "hostname": "rpi300",
+        "external-static-ip": "192.168.2.200",
+        "external-gateway": "192.168.2.1",
+        "external-dns": "192.168.2.1",
+        "master": "1",
+        "zsh": "1",
+        "internal-static-ip": "192.168.3.1",
+        "wifi-ssid": "YourSSID"
+    }
+}

@@ -1,6 +1,6 @@
 #!/bin/bash
 #---------- see https://github.com/joelong01/Bash-Wizard----------------
-# bashWizard version 0.907
+# bashWizard version 0.909
 # this will make the error text stand out in red - if you are looking at these errors/warnings in the log file
 # you can use cat <logFile> to see the text in color.
 function echoError() {
@@ -39,23 +39,25 @@ fi
     fi
 function usage() {
     echoWarning "Parameters can be passed in the command line or in the input file. The command line overrides the setting in the input file."
-    echo "Provisions master and slave kubernetes nodes on Raspberry PI devices. "
+    echo "Provisions master and slave kubernetes nodes on Raspberry PI devices."
     echo ""
-    echo "Usage: $0  -t|--target-device -r|--raspbian-image -s|--sha-raspbian -h|--hostname -|--external-static-ip -|--external-gateway -|--external-dns -m|--master -z|--zsh -|--internal-static-ip -|--internal-gateway -|--internal-dns -i|--input-file " 1>&2
+    echo "Usage: $0  -t|--target-device -r|--raspbian-image -s|--sha-raspbian -h|--hostname --external-static-ip --external-gateway --external-dns -m|--master -z|--zsh --internal-static-ip --internal-gateway --internal-dns -i|--input-file --wifi-ssid --wifi-password " 1>&2
     echo ""
     echo " -t | --target-device          Required     The block device to write raspbian image to."
     echo " -r | --raspbian-image         Optional     Compressed (zip) raspbian OS image."
     echo " -s | --sha-raspbian           Optional     SHA value to validate the raspbian OS image file."
     echo " -h | --hostname               Required     Hostname of the new node"
-    echo " - | --external-static-ip     Optional     External static IP address (used for master wlan0 only)"
-    echo " - | --external-gateway       Optional     External router address (used for master wlan0 only)"
-    echo " - | --external-dns           Optional     External name server (DNS) address (used for master wlan0 only) "
+    echo "      --external-static-ip     Optional     External static IP address (used for master wlan0 only)"
+    echo "      --external-gateway       Optional     External router address (used for master wlan0 only)"
+    echo "      --external-dns           Optional     External name server (DNS) address (used for master wlan0 only)"
     echo " -m | --master                 Optional     Configure the master node (default is to configure slave nodes)"
     echo " -z | --zsh                    Optional     Install ZSH shell (and oh-my-zsh) on the node as default shell"
-    echo " - | --internal-static-ip     Optional     Internal network static IP address (for private kube network)"
-    echo " - | --internal-gateway       Optional     Internal network default gateway (for slave nodes only)"
-    echo " - | --internal-dns           Optional     Internal network name server (DNS) address (for slave nodes only)"
+    echo "      --internal-static-ip     Optional     Internal network static IP address (for private kube network)"
+    echo "      --internal-gateway       Optional     Internal network default gateway (for slave nodes only)"
+    echo "      --internal-dns           Optional     Internal network name server (DNS) address (for slave nodes only)"
     echo " -i | --input-file             Optional     the name of the input file. pay attention to $PWD when setting this"
+    echo "      --wifi-ssid              Optional     SSID for external wireless network (used for master wlan0 only)"
+    echo "      --wifi-password          Optional     Password for external wireless network (used for master wlan0 only)"
     echo ""
     exit 1
 }
@@ -87,13 +89,17 @@ function echoInput() {
     echoInfo "$network_internal_name_server"
     echo -n "    input-file............ "
     echoInfo "$inputFile"
+    echo -n "    wifi-ssid............. "
+    echoInfo "$wireless_ssid"
+    echo -n "    wifi-password......... "
+    echoInfo "$wireless_password"
 
 }
 
 function parseInput() {
     
-    local OPTIONS=t:r:s:h::::mz:::i:
-    local LONGOPTS=target-device:,raspbian-image:,sha-raspbian:,hostname:,external-static-ip:,external-gateway:,external-dns:,master,zsh,internal-static-ip:,internal-gateway:,internal-dns:,input-file:
+    local OPTIONS=t:r:s:h:mzi:
+    local LONGOPTS=target-device:,raspbian-image:,sha-raspbian:,hostname:,external-static-ip:,external-gateway:,external-dns:,master,zsh,internal-static-ip:,internal-gateway:,internal-dns:,input-file:,wifi-ssid:,wifi-password:
 
     # -use ! and PIPESTATUS to get exit code with errexit set
     # -temporarily store output to be able to check for errors
@@ -162,6 +168,14 @@ function parseInput() {
             inputFile=$2
             shift 2
             ;;
+        - | --wifi-ssid)
+            wireless_ssid=$2
+            shift 2
+            ;;
+        - | --wifi-password)
+            wireless_password=$2
+            shift 2
+            ;;
         --)
             shift
             break
@@ -175,7 +189,7 @@ function parseInput() {
 }
 # input variables 
 declare target_device=
-declare raspbian_image=~/Downloads/2018-11-13-raspbian-stretch-lite.zip
+declare raspbian_image=$HOME/Downloads/2018-11-13-raspbian-stretch-lite.zip
 declare raspbian_sha=47ef1b2501d0e5002675a50b6868074e693f78829822eef64f3878487953234d
 declare hostname=
 declare network_static_ip=192.168.2.200
@@ -187,6 +201,8 @@ declare network_internal_static_ip=192.168.3.1
 declare network_internal_router=192.168.3.1
 declare network_internal_name_server=192.168.2.1
 declare inputFile=
+declare wireless_ssid=
+declare wireless_password=
 
 parseInput "$@"
 
@@ -210,6 +226,8 @@ if [ "${inputFile}" != "" ]; then
     network_internal_static_ip=$(echo "${configSection}" | jq '.["internal-static-ip"]' --raw-output)
     network_internal_router=$(echo "${configSection}" | jq '.["internal-gateway"]' --raw-output)
     network_internal_name_server=$(echo "${configSection}" | jq '.["internal-dns"]' --raw-output)
+    wireless_ssid=$(echo "${configSection}" | jq '.["wifi-ssid"]' --raw-output)
+    wireless_password=$(echo "${configSection}" | jq '.["wifi-password"]' --raw-output)
 
     # we need to parse the again to see if there are any overrides to what is in the config file
     parseInput "$@"
@@ -226,9 +244,10 @@ fi
 
 
     # --- BEGIN USER CODE ---
-
-function writeImageToTargetDevice {
+    function writeImageToTargetDevice {
     local stage="[write-image]"
+    local raspbian_image=$( eval "echo $raspbian_image" )  # expand any path variables like $HOME
+    
     if [ -b $target_device ]; then
         echoInfo "$stage Found target device $target_device."
     else
@@ -243,7 +262,6 @@ function writeImageToTargetDevice {
         echoError "$( df | grep $target_device )"
         return 1
     fi
-
     if [ "$( sha256sum $raspbian_image | awk '{print $1;}' )" == "$raspbian_sha" ]; then
         echoInfo "$stage SHA256 checksum verified on raspbian image."
     else
@@ -303,8 +321,10 @@ function enableSshOnRaspbian {
     local stage="[configure-ssh]"
     echoInfo "$stage Enabling ssh in raspbian" 
     sudo touch $mount_dir/boot/ssh
-
-    if [ $config_master]; then
+    echoInfo "$stage Disabling ssh using password authentication" 
+    sudo sed -i 's/^#PasswordAuthentication yes$/PasswordAuthentication no/g' $mount_dir/etc/ssh/sshd_config
+    
+    if [ $config_master ]; then
         echoInfo "$stage Generating ssh server keys"
         sudo mkdir -p $mount_dir/etc/ssh
 
@@ -319,10 +339,21 @@ function enableSshOnRaspbian {
         sed -i '/^'$network_static_ip'/d' ~/.ssh/known_hosts
         echo $network_static_ip $known_server_key >> ~/.ssh/known_hosts
 
-        echoInfo "$stage Copying id_rsa.pub to authorized_keys"
-        sudo mkdir $mount_dir/home/pi/.ssh
+        echoInfo "$stage Copying local id_rsa.pub to authorized_keys"
+        sudo mkdir -p $mount_dir/home/pi/.ssh
         sudo cp ~/.ssh/id_rsa.pub $mount_dir/home/pi/.ssh/authorized_keys
         sudo chmod a+r $mount_dir/home/pi/.ssh/authorized_keys
+
+        echoInfo "$stage Creating id_rsa for pi user on master"
+        sudo ssh-keygen -q -N "" -t rsa -C "pi" -f $mount_dir/home/pi/.ssh/id_rsa
+        cp $mount_dir/home/pi/.ssh/id_rsa.pub ./pi.pub
+    else
+        if [ -f ./pi.pub ]; then
+            echoInfo "$stage Copying master pi public key to slave authorized_keys"
+            sudo mkdir -p $mount_dir/home/pi/.ssh
+            sudo cp ./pi.pub $mount_dir/home/pi/.ssh/authorized_keys
+            sudo chmod a+r $mount_dir/home/pi/.ssh/authorized_keys
+        fi
     fi
 }
 
@@ -343,6 +374,28 @@ network={
 }' | sudo tee $mount_dir/boot/wpa_supplicant.conf > /dev/null
 
     echoInfo "$stage Wrote wireless configureation to raspbian"   
+}
+
+function configGateway {
+    echo '#!/bin/sh
+iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+iptables -A FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+iptables -A FORWARD -i eth0 -o wlan0 -j ACCEPT
+' | sudo tee $mount_dir/usr/bin/startgateway.sh > /dev/null
+sudo chmod 750 $mount_dir/usr/bin/startgateway.sh  
+
+    echo '[Unit]
+Description=Start Gateway
+After=network-online.target
+Requires=network-online.target
+
+[Service]
+Type=[oneshot]
+ExecStart=/usr/bin/startgateway.sh
+
+[Install]
+WantedBy=multi-user.target
+' | sudo tee $mount_dir/etc/systemd/system/multi-user.target.wants/startgateway.service > /dev/null
 }
 
 function updateHostname {
@@ -533,12 +586,10 @@ mountDeviceToTemp
 enableSshOnRaspbian
 if [ $config_master ]; then
     enableWirelessWpa
+    configGateway
 fi
 updateHostname
 updateStaticNetwork
-# TODO: Add script for setting up gateway on master
-# TODO: Change password for pi user, disable ssh by password
-# TODO: Create a shared pi user rda key login, for easy ssh between nodes 
 createSetupScripts
 
 cleanUpMountDir
@@ -546,11 +597,9 @@ cleanUpMountDir
 if [ $config_master ]; then
     waitForPiBoot
     echoInfo "[waiting] Waiting for kubepi_setup"
-    ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_setup.sh done. Rebooting...$/q'
+    ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_setup.sh done. Rebooting...$/ q'
     echoInfo "[waiting] Waiting for kubepi_master_setup"
-    ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_master_setup.sh done.$/q'
+    ssh pi@$network_static_ip "tail -f ~/rc.output" | sed '/^kubepi_master_setup.sh done.$/ q'
     getMasterConfig
 fi
-  
     # --- END USER CODE ---
-
