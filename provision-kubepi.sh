@@ -39,7 +39,7 @@ fi
     fi
 function usage() {
     echoWarning "Parameters can be passed in the command line or in the input file. The command line overrides the setting in the input file."
-    echo "Provisions master and slave kubernetes nodes on Raspberry PI devices."
+    echo "Provisions master and worker kubernetes nodes on Raspberry PI devices."
     echo ""
     echo "Usage: $0  -t|--target-device -r|--raspbian-image -s|--sha-raspbian -h|--hostname --external-static-ip --external-gateway --external-dns -m|--master -z|--zsh --internal-static-ip --internal-gateway --internal-dns -i|--input-file --wifi-ssid --wifi-password " 1>&2
     echo ""
@@ -50,11 +50,11 @@ function usage() {
     echo "      --external-static-ip     Optional     External static IP address (used for master wlan0 only)"
     echo "      --external-gateway       Optional     External router address (used for master wlan0 only)"
     echo "      --external-dns           Optional     External name server (DNS) address (used for master wlan0 only)"
-    echo " -m | --master                 Optional     Configure the master node (default is to configure slave nodes)"
+    echo " -m | --master                 Optional     Configure the master node (default is to configure worker nodes)"
     echo " -z | --zsh                    Optional     Install ZSH shell (and oh-my-zsh) on the node as default shell"
     echo "      --internal-static-ip     Optional     Internal network static IP address (for private kube network)"
-    echo "      --internal-gateway       Optional     Internal network default gateway (for slave nodes only)"
-    echo "      --internal-dns           Optional     Internal network name server (DNS) address (for slave nodes only)"
+    echo "      --internal-gateway       Optional     Internal network default gateway (for worker nodes only)"
+    echo "      --internal-dns           Optional     Internal network name server (DNS) address (for worker nodes only)"
     echo " -i | --input-file             Optional     the name of the input file. pay attention to $PWD when setting this"
     echo "      --wifi-ssid              Optional     SSID for external wireless network (used for master wlan0 only)"
     echo "      --wifi-password          Optional     Password for external wireless network (used for master wlan0 only)"
@@ -349,7 +349,7 @@ function enableSshOnRaspbian {
         cp $mount_dir/home/pi/.ssh/id_rsa.pub ./pi.pub
     else
         if [ -f ./pi.pub ]; then
-            echoInfo "$stage Copying master pi public key to slave authorized_keys"
+            echoInfo "$stage Copying master pi public key to worker authorized_keys"
             sudo mkdir -p $mount_dir/home/pi/.ssh
             sudo cp ./pi.pub $mount_dir/home/pi/.ssh/authorized_keys
             sudo chmod a+r $mount_dir/home/pi/.ssh/authorized_keys
@@ -504,15 +504,15 @@ echo ""
         ' | sudo tee $mount_dir/home/pi/kubepi_master_setup.sh > /dev/null
         sudo chmod 750 $mount_dir/home/pi/kubepi_master_setup.sh  
     else
-        echoInfo "$stage Creating kubepi_slave_setup.sh to join cluster."
+        echoInfo "$stage Creating kubepi_worker_setup.sh to join cluster."
         kubeadm_join="$(cat kubeadm-join)"
         echo '#!/bin/sh
 '$kubeadm_join'
-echo "kubepi_slave_setup.sh done."
+echo "kubepi_worker_setup.sh done."
 echo "EOL"
 echo ""
-        ' | sudo tee $mount_dir/home/pi/kubepi_slave_setup.sh > /dev/null
-        sudo chmod 750 $mount_dir/home/pi/kubepi_slave_setup.sh  
+        ' | sudo tee $mount_dir/home/pi/kubepi_worker_setup.sh > /dev/null
+        sudo chmod 750 $mount_dir/home/pi/kubepi_worker_setup.sh  
         
     fi
 
@@ -535,7 +535,7 @@ cat <<\EOF > /etc/rc.local
 # This script only executes one time and then replaces itself with 
 # another rc.local as defined below. 
 
-nohup /home/pi/kubepi_slave_setup.sh >> /home/pi/rc.output 2>&1 &
+nohup /home/pi/kubepi_worker_setup.sh >> /home/pi/rc.output 2>&1 &
 
 cat <<\EOF > /etc/rc.local
 '"$(cat $mount_dir/etc/rc.local)" | sudo tee $mount_dir/etc/rc.local > /dev/null
@@ -573,7 +573,7 @@ function waitForPiBoot {
 if [ $config_master ]; then
     echoWarning "Preparing Master Node"
 else
-    echoWarning "Preparing Slave Node"
+    echoWarning "Preparing worker Node"
 fi
 
 writeImageToTargetDevice
